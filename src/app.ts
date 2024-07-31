@@ -1,0 +1,81 @@
+import * as fs from 'fs';
+import axios from 'axios';
+import { match } from 'assert';
+import {SerializeOptions, DeserializeOptions, parse, stringify} from 'hjson';
+import beautify from 'cssbeautify';
+
+const BASE_URL: string = 'https://jackbox.tv/';
+const BUNDLE_URL: string = 'https://bundles.jackbox.tv/';
+
+async function fetchData(): Promise<void> {
+    try {
+        const response = await axios.get(BASE_URL);
+        const site: string = response.data;
+
+        const mainScriptMatch = site.match(/<script type="module" crossorigin src="(.*?\.js)"/);
+        const mainScript: string | null = mainScriptMatch ? mainScriptMatch[1].replace(/^\/+/, '') : null;
+
+        if (mainScript) {
+            console.log(mainScript);
+
+            if (!fs.existsSync('out')) {
+                fs.mkdirSync('out');
+            }
+
+            const scriptResponse = await axios.get(`${BASE_URL}${mainScript}`);
+            const { webcrack } = await import('webcrack'); // Dynamic import
+            const scriptClean = await webcrack(scriptResponse.data);
+            fs.writeFileSync(`out/${mainScript}`, scriptClean.code, 'utf-8');
+            fs.writeFileSync('out/index.html', site, 'utf-8');
+            
+            //TODO: cleanup the regex
+            const regex = /{\n.*main: {\n.*sha:.*,\n.*lastUpdated:.*,\n.*version:.*,\n.*type:.*,\n.*\n.*"@connect":[\s\S]*}\n.*}/g;
+            const matches = [...scriptClean.code.matchAll(regex)];
+            let gameInfo = parse(matches[0][0]);
+
+            const fetchBundleData = async (key: string) => {
+
+                let js = gameInfo['main']['bundles'][key]['file'];
+                let css = gameInfo['main']['bundles'][key]['css'][0];
+                let base = gameInfo['main']['bundles'][key]['base'];
+                
+                console.log(`${BUNDLE_URL}${base}/${css}`);
+
+                const cssResp = await axios.get(`${BUNDLE_URL}${base}/${css}`);
+                
+                
+
+                // Create directory for CSS file if it doesn't exist
+                
+                const cssDir = `out/bundles/${base}/assets`;
+                if (!fs.existsSync(cssDir)) {
+                    fs.mkdirSync(cssDir, { recursive: true });
+                }
+                console.log(`${cssDir}/${css.replace('assets/', '')}`, cssResp.data);
+                fs.writeFileSync(`${cssDir}/${css.replace('assets/', '')}`, cssResp.data, 'utf-8');
+
+                /*const jsResp = await axios.get(`${BUNDLE_URL}${base}/${js}`);
+                const jsClean = await webcrack(jsResp.data);
+                
+                // Create directory for JS file if it doesn't exist
+                const jsDir = `out/bundles/${base}`;
+                if (!fs.existsSync(jsDir)) {
+                    fs.mkdirSync(jsDir, { recursive: true });
+                }
+                fs.writeFileSync(`${jsDir}/${js}`, jsClean.code, 'utf-8');
+                
+                */
+            };
+
+            Object.keys(gameInfo['main']['bundles']).forEach(async (key: string) => {
+                await fetchBundleData(key);
+            });
+            
+        }
+    
+    } catch (error) {
+        console.error('Error fetching data:', error);
+    }
+}
+
+fetchData();

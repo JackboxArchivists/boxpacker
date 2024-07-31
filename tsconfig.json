@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+      "module": "ESNext",                                  /* Specify what module code is generated. */
+      "moduleResolution": "node",  
+      "esModuleInterop": true,
+      "target": "ES2022",
+      "sourceMap": true,
+      "outDir": "dist",
+    },
+    "lib": ["ES2022"]
+}
