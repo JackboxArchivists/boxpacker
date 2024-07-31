@@ -3,6 +3,7 @@ import axios from 'axios';
 import { match } from 'assert';
 import {SerializeOptions, DeserializeOptions, parse, stringify} from 'hjson';
 import beautify from 'cssbeautify';
+import * as path from 'path';
 
 const BASE_URL: string = 'https://jackbox.tv/';
 const BUNDLE_URL: string = 'https://bundles.jackbox.tv/';
@@ -51,10 +52,10 @@ async function fetchData(): Promise<void> {
                 if (!fs.existsSync(cssDir)) {
                     fs.mkdirSync(cssDir, { recursive: true });
                 }
-                console.log(`${cssDir}/${css.replace('assets/', '')}`, cssResp.data);
-                fs.writeFileSync(`${cssDir}/${css.replace('assets/', '')}`, cssResp.data, 'utf-8');
+                const cssClean = beautify(cssResp.data);
+                fs.writeFileSync(`${cssDir}/${css.replace('assets/', '')}`, cssClean, 'utf-8');
 
-                /*const jsResp = await axios.get(`${BUNDLE_URL}${base}/${js}`);
+                const jsResp = await axios.get(`${BUNDLE_URL}${base}/${js}`);
                 const jsClean = await webcrack(jsResp.data);
                 
                 // Create directory for JS file if it doesn't exist
@@ -63,8 +64,26 @@ async function fetchData(): Promise<void> {
                     fs.mkdirSync(jsDir, { recursive: true });
                 }
                 fs.writeFileSync(`${jsDir}/${js}`, jsClean.code, 'utf-8');
-                
-                */
+                let linkRegex = /http.*\/\/bundles.jackbox.tv\/.*\..*/g;
+                let links = Array.from(jsClean.code.match(linkRegex) || []);
+                let links2 = Array.from(cssClean.match(linkRegex) || []);
+
+                const downloadFile = async (url: string, outputPath: string) => {
+                    const response = await axios.get(url, { responseType: 'arraybuffer' });
+                    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+                    fs.writeFileSync(outputPath, response.data);
+                };
+
+                const downloadLinks = async (links: string[]) => {
+                    for (const link of links) {
+                        const outputPath = `out/${link.replace('https://bundles.jackbox.tv/', '')}`;
+                        await downloadFile(link, outputPath);
+                    }
+                };
+
+                await downloadLinks(links);
+                await downloadLinks(links2);
+
             };
 
             Object.keys(gameInfo['main']['bundles']).forEach(async (key: string) => {
