@@ -53,7 +53,7 @@ async function fetchData(): Promise<void> {
                     fs.mkdirSync(cssDir, { recursive: true });
                 }
                 const cssClean = beautify(cssResp.data);
-                fs.writeFileSync(`${cssDir}/${css.replace('assets/', '')}`, cssClean, 'utf-8');
+                fs.writeFileSync(`${cssDir}/${css.replace('assets/', '')}`, cssResp.data, 'utf-8');
 
                 const jsResp = await axios.get(`${BUNDLE_URL}${base}/${js}`);
                 const jsClean = await webcrack(jsResp.data);
@@ -64,28 +64,39 @@ async function fetchData(): Promise<void> {
                     fs.mkdirSync(jsDir, { recursive: true });
                 }
                 fs.writeFileSync(`${jsDir}/${js}`, jsClean.code, 'utf-8');
-                let linkRegex = /http.*\/\/bundles.jackbox.tv\/.*\..*/g;
+                let linkRegex = /(https:\/\/bundles\.jackbox\.tv\/main\/[^\/]+\/assets\/[a-z0-9]+\.(eot|png|jpg|gif|mp3|wav|js|css))/g;
                 let links = Array.from(jsClean.code.match(linkRegex) || []);
-                let links2 = Array.from(cssClean.match(linkRegex) || []);
-
-                const downloadFile = async (url: string, outputPath: string) => {
-                    const response = await axios.get(url, { responseType: 'arraybuffer' });
-                    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-                    fs.writeFileSync(outputPath, response.data);
-                };
-
-                const downloadLinks = async (links: string[]) => {
-                    for (const link of links) {
-                        const outputPath = `out/${link.replace('https://bundles.jackbox.tv/', '')}`;
-                        await downloadFile(link, outputPath);
+                let links2 = Array.from(cssResp.data.match(linkRegex) || []);
+                
+                async function downloadAndSaveFiles(urls: string[]): Promise<void> {
+                    // Updated regex to match file extensions more accurately
+                    const extensionRegex = /\.([a-zA-Z0-9]+)(?:[?#]|$)/;
+                  
+                    for (const url of urls) {
+                      const match = url.match(extensionRegex);
+                      if (match) {
+                        try {
+                          const response = await axios.get(url, { responseType: 'arraybuffer' });
+                          
+                          // Extract the pathname and remove query parameters
+                          const urlPath = new URL(url).pathname.split('?')[0];
+                          const localPath = path.join('out', 'bundles', urlPath);
+                  
+                          // Create directories recursively
+                          await fs.mkdirSync(path.dirname(localPath), { recursive: true });
+                  
+                          // Write file
+                          await fs.writeFileSync(localPath, response.data);
+                        } catch (error) {
+                          console.error(`Error downloading ${url}:`, error);
+                        }
+                      } else {
+                      }
                     }
-                };
-
-                await downloadLinks(links);
-                await downloadLinks(links2);
-
+                }
+                await downloadAndSaveFiles(links as string[]);
+                await downloadAndSaveFiles(links2 as string[]);
             };
-
             Object.keys(gameInfo['main']['bundles']).forEach(async (key: string) => {
                 await fetchBundleData(key);
             });
